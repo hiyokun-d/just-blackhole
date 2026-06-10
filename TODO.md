@@ -5,17 +5,17 @@ Physics-accurate. Real formulas. No aesthetic shortcuts.
 ---
 
 ## Phase 1 — Coordinate System
-- [ ] Remove gradient code, replace with solid black screen
-- [ ] Convert pixel (x, y) to normalized screen coords (-1.0 to 1.0), centered at screen middle
-- [ ] Map screen coords to physical coords using camera distance + FOV
-- [ ] Define constants: `M` (mass), `RS` (Schwarzschild radius = 2M in geometric units G=c=1)
+- [x] Remove gradient code, replace with solid black screen
+- [x] Convert pixel (x, y) to normalized screen coords (-1.0 to 1.0), centered at screen middle
+- [x] Map screen coords to physical coords using camera distance + FOV
+- [x] Define constants: `M` (mass), `RS` (Schwarzschild radius = 2M in geometric units G=c=1)
 
 ---
 
 ## Phase 2 — Event Horizon
-- [ ] Compute `r` = distance from each pixel ray to BH center
-- [ ] If `r < RS` → pixel = `0xFF000000` (pure black)
-- [ ] Confirm: black circle visible on screen
+- [x] Compute `r` = distance from each pixel ray to BH center
+- [x] If `r < RS` → pixel = `0xFF000000` (pure black)
+- [x] Confirm: black circle visible on screen
 
 ---
 
