@@ -1,6 +1,6 @@
 # Blackhole Simulation — TODO
 
-Physics-accurate. Real formulas. No aesthetic shortcuts.
+Physics-accurate. Real formulas. No aesthetic shortcuts. Modular structure.
 
 ---
 
@@ -20,9 +20,11 @@ Physics-accurate. Real formulas. No aesthetic shortcuts.
 ---
 
 ## Phase 3 — Background Starfield
-- [ ] Generate fixed star positions at startup (seeded RNG, not per-frame)
-- [ ] Map ray direction → star lookup (equirectangular or cubemap)
+- [x] Add `rand` crate to `Cargo.toml`
+- [x] Generate fixed star positions at startup (seeded RNG, not per-frame)
+- [x] Map ray direction → star lookup
 - [ ] Far rays sample undeflected background for now
+- [ ] Stars move over time — animate position using `frame_count` as time offset (parallax or slow drift)
 
 ---
 
@@ -83,6 +85,20 @@ Physics-accurate. Real formulas. No aesthetic shortcuts.
 - [ ] Bloom effect: bright pixels bleed into neighbors (convolution or simple blur)
 - [ ] Tone mapping: HDR → displayable range (use Reinhard or ACES)
 - [ ] Tweak `M`, camera FOV, disk bounds until render matches real BH images
+
+---
+
+## Modularization — Split `main.rs` into modules (do after Phase 5)
+
+> Do this AFTER core physics works. Don't split empty rooms.
+
+- [ ] `src/camera.rs` — ray generation, FOV, screen-to-world coord transform
+- [ ] `src/physics.rs` — geodesic ODE integrator (RK4), impact parameter, deflection
+- [ ] `src/disk.rs` — accretion disk intersection, temperature profile, blackbody color
+- [ ] `src/starfield.rs` — star generation, star lookup by ray direction
+- [ ] `src/render.rs` — pixel color assembly, tone mapping, bloom
+- [ ] `src/constants.rs` — all physical constants (`M`, `RS`, `CAM_DIST`, `ISCO`, etc.)
+- [ ] Wire all modules back in `main.rs` with `mod` declarations
 
 ---
 
