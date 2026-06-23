@@ -12,12 +12,12 @@ const M:              f32   = 1.0;
 const RS:             f32   = 2.0 * M;
 const CAM_DIST:       f32   = 40.0;
 const DISK_INNER:     f32   = 3.0 * RS;
-const DISK_OUTER:     f32   = 12.0 * RS;
+const DISK_OUTER:     f32   = 15.0 * RS;   // wider → longer arms
 const T_MAX:          f32   = 1.0;
 const PHOTON_SPHERE:  f32   = 1.5 * RS;
-const BLOOM_RADIUS:   usize = 10;
-const BLOOM_STRENGTH: f32   = 0.25;
-const BLOOM_THRESH:   f32   = 0.72;
+const BLOOM_RADIUS:   usize = 18;           // wider glow halo
+const BLOOM_STRENGTH: f32   = 0.45;
+const BLOOM_THRESH:   f32   = 0.55;         // more pixels bloom
 
 enum PixelCache {
     Black,
@@ -75,17 +75,44 @@ fn doppler_factor(r: f32, hit: Vec3, ray_dir: Vec3) -> f32 {
     1.0 / (gamma * (1.0 - v * cos_psi))
 }
 
+// Temperature → Gargantua color palette: dark-orange → gold → near-white
+fn disk_color(t: f32) -> [f32; 3] {
+    let t = t.clamp(0.0, 1.0);
+    if t > 0.80 {
+        let s = (t - 0.80) / 0.20;
+        [1.0, 0.72 + 0.23 * s, 0.18 + 0.62 * s]   // gold → white-gold
+    } else if t > 0.45 {
+        let s = (t - 0.45) / 0.35;
+        [1.0, 0.38 + 0.34 * s, 0.02 + 0.16 * s]   // orange-gold → bright gold
+    } else if t > 0.15 {
+        let s = (t - 0.15) / 0.30;
+        [0.65 + 0.35 * s, 0.10 + 0.28 * s, 0.02 * s] // dark-orange → orange-gold
+    } else {
+        let s = t / 0.15;
+        [0.12 + 0.53 * s, 0.01 + 0.09 * s, 0.0]   // near-black → dark-orange
+    }
+}
+
 fn disk_hdr(r: f32, hit: Vec3, ray_dir: Vec3, spin: f32, angle: f32) -> [f32; 3] {
-    let t_raw = T_MAX * (DISK_INNER / r).powf(0.75) * (1.0 - (DISK_INNER / r).sqrt()).powf(0.25);
-    let t     = (t_raw * (1.0 + 0.25 * (angle * 4.0).sin())).clamp(0.0, 1.0);
-    let d4    = doppler_factor(r, hit, ray_dir).powi(4).clamp(0.0, 8.0);
-    let g     = (1.0 - RS / r).sqrt();
-    let bri   = d4 * g * spin * 2.0;
-    [
-        (0.6  + 0.4 * t) * bri,
-        (0.25 + 0.6 * t) * bri,
-        (0.02 + 0.2 * t) * bri,
-    ]
+    let r_ratio = DISK_INNER / r;
+    // Novikov-Thorne profile: zero at ISCO; peak near 1.36*r_inner
+    let t_nt = T_MAX * r_ratio.powf(0.75) * (1.0 - r_ratio.sqrt()).powf(0.25);
+    // base glow so inner edge isn't cold; add azimuthal texture variation
+    let t    = (t_nt + 0.18 + 0.06 * (angle * 3.0).sin()).clamp(0.0, 1.0);
+    let col  = disk_color(t);
+
+    // Relativistic Doppler beaming — allow extreme asymmetry for Gargantua look
+    let d4   = doppler_factor(r, hit, ray_dir).powi(4).clamp(0.0, 25.0);
+
+    // Gravitational redshift: photons lose energy climbing out of gravity well
+    let g    = (1.0 - RS / r).sqrt();
+
+    // Column density: grazing rays traverse more disk material → long bright arms
+    // floor at 0.018 rad prevents explosion at exact edge-on
+    let thickness = (0.16 / (ray_dir.y.abs() + 0.018)).min(8.0);
+
+    let bri = d4 * g * spin * thickness;
+    [col[0] * bri, col[1] * bri, col[2] * bri]
 }
 
 fn main() {
@@ -95,14 +122,14 @@ fn main() {
     let mut bloom_v: Vec<[f32;3]> = vec![[0.0;3]; SCREEN_WIDTH * SCREEN_HEIGHT];
 
     let mut window = Window::new(
-        "Blackhole simulation",
+        "Blackhole — Schwarzschild",
         SCREEN_WIDTH, SCREEN_HEIGHT, WindowOptions::default(),
     ).unwrap_or_else(|e| panic!("{}", e));
     window.set_target_fps(60);
 
     const STAR_TEX: usize = 1024;
     let mut star_tex = vec![0u8; STAR_TEX * STAR_TEX];
-    for _ in 0..1000 {
+    for _ in 0..1200 {
         let sx = random_range(-1.0_f32..1.0_f32);
         let sy = random_range(-1.0_f32..1.0_f32);
         let cx = ((sx + 1.0) * 0.5 * STAR_TEX as f32) as usize;
@@ -114,7 +141,7 @@ fn main() {
 
     let b_crit        = (3.0 * 3.0_f32.sqrt() / 2.0) * RS;
     let mut cam_dist  = CAM_DIST;
-    let mut cam_pitch = 0.2_f32;
+    let mut cam_pitch = 0.17_f32;   // ~10° from disk plane — Gargantua viewing angle
     let mut cam_yaw   = 0.0_f32;
 
     let build_cache = |cam_dist: f32, cam_pitch: f32, cam_yaw: f32| -> Vec<PixelCache> {
@@ -168,9 +195,6 @@ fn main() {
                     let phi_straight = 2.0 * (r_cam / b).atan();
                     let deflection   = (phi - phi_straight).max(0.0);
 
-                    // Lensed secondary image: b < 1.8*b_crit keeps this a thin arc
-                    // at all camera distances — without b limit, close cameras make
-                    // the whole sky qualify (phi_straight shrinks → deflection grows)
                     if deflection > 0.9 && b < b_crit * 1.8 {
                         let n       = ray_origin.cross(ray_dir).normalize();
                         let tangent = n.cross(ray_dir);
@@ -213,7 +237,6 @@ fn main() {
 
         let mut dirty = false;
 
-        // Keyboard zoom / pitch / yaw — immediate rebuild
         if window.is_key_pressed(Key::Equal, KeyRepeat::Yes) {
             target_cam_dist = (target_cam_dist - 1.5).max(RS * 3.0);
         }
@@ -233,8 +256,6 @@ fn main() {
             cam_yaw += 0.04; dirty = true;
         }
 
-        // Mouse drag — update yaw/pitch each frame (stars move instantly via cam_angle),
-        // but don't rebuild cache mid-drag; do a single rebuild on release instead
         let prev_dragging = is_dragging;
         if window.get_mouse_down(MouseButton::Left) {
             is_dragging = true;
@@ -250,23 +271,19 @@ fn main() {
         } else {
             is_dragging  = false;
             mouse_prev   = None;
-            // rebuild once when button is released so disk snaps to new orientation
             if prev_dragging { dirty = true; }
         }
 
-        // Scroll wheel — update target, lerp cam_dist toward it each frame
         if let Some((_, sy)) = window.get_scroll_wheel() {
             if sy.abs() > 0.0 {
                 target_cam_dist = (target_cam_dist - sy * 2.5).clamp(RS * 3.0, 80.0);
             }
         }
 
-        // Smooth lerp cam_dist → target (easing factor 0.15 ≈ ~10 frames to settle)
         let prev_dist = cam_dist;
         cam_dist += (target_cam_dist - cam_dist) * 0.15;
         if (cam_dist - prev_dist).abs() > 0.02 { dirty = true; }
 
-        // Rebuild at most every 80ms during continuous scroll/key, instantly on release
         let throttle = if prev_dragging { Duration::ZERO } else { Duration::from_millis(80) };
         if dirty && last_rebuild.elapsed() >= throttle {
             pixel_cache  = build_cache(cam_dist, cam_pitch, cam_yaw);
@@ -279,45 +296,43 @@ fn main() {
                 PixelCache::Black => [0.0; 3],
 
                 PixelCache::Background { u_bent, v_bent } => {
-                    // cam_yaw offsets star rotation so stars follow the disk when orbiting
                     let cam_angle = time * 0.04 + cam_yaw;
                     let u_rot = u_bent * cam_angle.cos() - v_bent * cam_angle.sin();
                     let v_rot = u_bent * cam_angle.sin() + v_bent * cam_angle.cos();
                     let tx = ((u_rot + 1.0) * 0.5 * STAR_TEX as f32) as usize;
                     let ty = ((v_rot + 1.0) * 0.5 * STAR_TEX as f32) as usize;
                     if tx < STAR_TEX && ty < STAR_TEX && star_tex[ty * STAR_TEX + tx] > 0 {
-                        [0.9, 0.9, 1.1]
+                        [0.8, 0.85, 1.0]
                     } else {
                         [0.0; 3]
                     }
                 }
 
                 PixelCache::PhotonGlow(orbits) => {
-                    let i = (*orbits as f32 * 1.5).min(4.0);
-                    [i * 1.0, i * 0.88, i * 0.55]
+                    let i = (*orbits as f32 * 2.0).min(5.5);
+                    [i * 1.0, i * 0.82, i * 0.40]
                 }
 
                 PixelCache::Disk { r, hit, ray_dir, angle } => {
                     let ra       = angle + time * 0.25;
                     let spin     = (ra.sin()
-                        + (ra * 3.0 + time * 0.08).sin() * 0.25
-                        + (ra * 7.0 - time * 0.04).sin() * 0.1)
-                        * 0.7 + 1.1;
+                        + (ra * 3.0 + time * 0.08).sin() * 0.20
+                        + (ra * 7.0 - time * 0.04).sin() * 0.08)
+                        * 0.5 + 1.0;
                     let edge_in  = ((r - DISK_INNER) / RS).clamp(0.0, 1.0);
-                    let edge_out = ((DISK_OUTER - r) / (RS * 2.0)).clamp(0.0, 1.0);
+                    let edge_out = ((DISK_OUTER - r) / (RS * 4.0)).clamp(0.0, 1.0);
                     disk_hdr(*r, *hit, *ray_dir, spin * edge_in * edge_out, ra)
                 }
 
                 PixelCache::LensedDisk { r, hit, ray_dir, angle } => {
                     let ra       = angle + time * 0.25;
                     let spin     = (ra.sin()
-                        + (ra * 3.0 + time * 0.08).sin() * 0.25) * 0.5 + 0.9;
+                        + (ra * 3.0 + time * 0.08).sin() * 0.20) * 0.35 + 0.85;
                     let edge_in  = ((r - DISK_INNER) / RS).clamp(0.0, 1.0);
-                    let edge_out = ((DISK_OUTER - r) / (RS * 2.0)).clamp(0.0, 1.0);
+                    let edge_out = ((DISK_OUTER - r) / (RS * 4.0)).clamp(0.0, 1.0);
                     let c        = disk_hdr(*r, *hit, *ray_dir, spin * edge_in * edge_out, ra);
-                    [c[0] * 0.28, c[1] * 0.28, c[2] * 0.28]
+                    [c[0] * 0.50, c[1] * 0.50, c[2] * 0.50]
                 }
-
             };
         });
 
