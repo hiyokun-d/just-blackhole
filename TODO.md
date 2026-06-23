@@ -56,41 +56,47 @@ Physics-accurate. Real formulas. No aesthetic shortcuts. Modular structure.
 ---
 
 ## Phase 7 — Relativistic Doppler & Beaming
-- [ ] Compute Keplerian orbital velocity: `v = sqrt(GM/r)` at disk hit point
-- [ ] Compute Doppler factor: `D = 1 / (γ * (1 - β*cos(ψ)))`
-- [ ] Apply beaming: `I_obs = D⁴ * I_emitted`
-- [ ] One side of disk brighter (approaching) + bluer; other side dimmer + redder
+- [x] Compute Keplerian orbital velocity: `v = sqrt(GM/r)` at disk hit point
+- [x] Compute Doppler factor: `D = 1 / (γ * (1 - β*cos(ψ)))`
+- [x] Apply beaming: `I_obs = D⁴ * I_emitted`
+- [x] One side of disk brighter (approaching) + bluer; other side dimmer + redder
 
 ---
 
 ## Phase 8 — Gravitational Redshift
-- [ ] Apply redshift factor to all photons: `g = sqrt(1 - rs/r)`
-- [ ] Photons from near BH lose energy climbing gravity well → dimmer + redder
-- [ ] Multiply final pixel color by `g`
+- [x] Apply redshift factor to all photons: `g = sqrt(1 - rs/r)`
+- [x] Photons from near BH lose energy climbing gravity well → dimmer + redder
+- [x] Multiply final pixel color by `g`
 
 ---
 
 ## Phase 9 — Photon Sphere Glow
-- [ ] Rays with `b ≈ b_crit` loop many times → accumulate disk light
-- [ ] Count orbits during ray march → add glow proportional to loop count
-- [ ] Thin bright ring at `r = 1.5 * RS`
+- [x] Rays with `b ≈ b_crit` loop many times → accumulate disk light
+- [x] Count orbits during ray march → add glow proportional to loop count
+- [x] Thin bright ring at `r = 1.5 * RS`
 
 ---
 
 ## Phase 10 — Animation (Interstellar-style live motion)
-- [ ] Auto-increment `frame_count` each frame (remove keypress requirement)
-- [ ] Animate disk: rotate color/brightness pattern around azimuthal angle over time
-- [ ] Animate stars: slow drift/parallax using `frame_count` as time offset
+- [x] Auto-increment time each frame using `Instant` (smooth, not frame-count based)
+- [x] Animate disk: rotate color/brightness pattern around azimuthal angle over time
+- [x] Pre-compute ray paths once at startup — render loop only does color math (smooth 60fps)
+- [x] Smooth 60fps confirmed
+- [ ] Animate stars: slow drift/parallax using time offset
 - [ ] Camera orbit: slowly rotate camera position around BH over time
-- [ ] Smooth 60fps confirmed
-- [ ] Full motion: stars drift, disk spins, camera orbits — looks like a movie
 
 ---
 
-## Phase 11 — Polish
-- [ ] Bloom effect: bright pixels bleed into neighbors (convolution or simple blur)
-- [ ] Tone mapping: HDR → displayable range (use Reinhard or ACES)
-- [ ] Tweak `M`, camera FOV, disk bounds until render matches real BH images
+## Phase 11 — Visual Polish (Interstellar look)
+- [ ] Bloom effect: bright pixels bleed into neighbors (box blur or gaussian — makes disk glow)
+- [ ] Tone mapping: HDR → displayable range (Reinhard: `c / (c + 1.0)`) — prevents blown-out whites
+- [ ] Warmer color palette: shift disk from orange→white to gold→white (Interstellar tone)
+- [ ] Disk texture: add fine noise/filament pattern using multi-octave sine — breaks up flat solid look
+- [ ] Disk thickness: soft vertical falloff based on ray angle — disk fades near edges not hard cutoff
+- [ ] Lensed back disk: rays from behind BH bent over shadow — the bright arc over the top of BH
+- [ ] Secondary photon ring: faint ring from light that orbited once (`orbits == 1`) — thinner than primary
+- [ ] Increase star count to 1000+ and vary brightness — some stars dimmer than others
+- [ ] Camera tilt ~15° like Interstellar — see disk from above at angle, back disk lensed over top
 
 ---
 
@@ -105,6 +111,14 @@ Physics-accurate. Real formulas. No aesthetic shortcuts. Modular structure.
 - [ ] `src/render.rs` — pixel color assembly, tone mapping, bloom
 - [ ] `src/constants.rs` — all physical constants (`M`, `RS`, `CAM_DIST`, `ISCO`, etc.)
 - [ ] Wire all modules back in `main.rs` with `mod` declarations
+
+---
+
+## Camera Controls
+- [ ] WASD — move camera position around BH
+- [ ] Mouse drag — rotate camera orientation (yaw/pitch)
+- [ ] Scroll wheel — zoom in/out (change CAM_DIST)
+- [ ] Camera state: position + yaw + pitch as mutable vars, updated each frame
 
 ---
 
