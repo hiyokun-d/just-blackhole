@@ -4,6 +4,8 @@ use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use rand::random_range;
 use rayon::prelude::*;
 
+use glam::Vec3;
+
 const SCREEN_WIDTH: usize = 800; // usize, unsigned pointer of integer
 const SCREEN_HEIGHT: usize = 600;
 
@@ -116,9 +118,14 @@ fn main() {
                     let u = (x - (SCREEN_WIDTH as f32) / 2.0) / SCREEN_HEIGHT as f32;
                     let v = (y - (SCREEN_HEIGHT as f32) / 2.0) / SCREEN_HEIGHT as f32;
 
+                    let ray_dir = Vec3::new(u, -v, -1.0).normalize();
+
                     let u0 = 1.0 / CAM_DIST;
 
-                    let b = (u.powi(2) + v.powi(2)).sqrt() * CAM_DIST; // impact
+                    let ray_origin = Vec3::new(0.0, 5.0, CAM_DIST);
+
+                    // let b = (u.powi(2) + v.powi(2)).sqrt() * CAM_DIST; // impact
+                    let b = ray_origin.cross(ray_dir).length();
                     let w0 = 1.0 / b;
 
                     if b < b_crit {
@@ -126,9 +133,23 @@ fn main() {
                         continue;
                     }
 
+                    if ray_dir.y.abs() > 0.0001 {
+                        let t = -ray_origin.y / ray_dir.y;
+
+                        if t > 0.0 {
+                            let hit = ray_origin + ray_dir * t;
+                            let r_hit = (hit.x * hit.x + hit.z * hit.z).sqrt();
+
+                            if r_hit >= DISK_INNER && r_hit <= DISK_OUTER {
+                                *pixel = disk_color(r_hit);
+                                continue;
+                            }
+                        }
+                    }
+
                     *pixel = match trace_tray(u0, w0) {
                         RayResult::Captured => 0xFF000000,
-                        RayResult::HitDisk(_r) => 0xFFFFFFFF,
+                        RayResult::HitDisk(r) => disk_color(r),
                         RayResult::Escaped(phi) => {
                             let alpha = phi - PI;
                             let u_bent = u * alpha.cos() - v * alpha.sin();

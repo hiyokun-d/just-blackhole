@@ -41,17 +41,17 @@ Physics-accurate. Real formulas. No aesthetic shortcuts. Modular structure.
 ---
 
 ## Phase 5 — Accretion Disk Geometry
-- [ ] Define disk as flat ring in equatorial plane: `r ∈ [3*RS, 12*RS]` (ISCO to outer edge)
-- [ ] Check if ray crosses disk plane (z=0 crossing during march)
-- [ ] Record intersection point `r_hit`
+- [x] Define disk constants: `DISK_INNER = 3*RS`, `DISK_OUTER = 12*RS`
+- [x] `RayResult::HitDisk(r)` enum variant added
+- [x] 3D ray-plane intersection — disk visible from angled camera
+- [x] Camera moved above disk plane (`y = 3.0`) — disk ring visible on screen
 
 ---
 
 ## Phase 6 — Disk Temperature & Color
-- [ ] Implement temperature profile: `T(r) = T_max * (r_inner/r)^(3/4) * (1 - sqrt(r_inner/r))^(1/4)`
-- [ ] ISCO at `r = 3*RS` = hottest (~10⁷ K, blue-white)
-- [ ] Outer edge = cooler (~10⁵ K, orange-red)
-- [ ] Approximate blackbody spectrum → RGB mapping
+- [x] Implement temperature profile: `T(r) = T_max * (r_inner/r)^(3/4) * (1 - sqrt(r_inner/r))^(1/4)`
+- [x] `disk_color(r)` function written — maps temperature to orange→white RGB
+- [x] Wired into `HitDisk` match arm — ready, waiting for 3D intersection to activate
 
 ---
 
@@ -77,10 +77,13 @@ Physics-accurate. Real formulas. No aesthetic shortcuts. Modular structure.
 
 ---
 
-## Phase 10 — Animation
+## Phase 10 — Animation (Interstellar-style live motion)
 - [ ] Auto-increment `frame_count` each frame (remove keypress requirement)
-- [ ] Animate disk: rotate texture/color pattern around azimuthal angle over time
+- [ ] Animate disk: rotate color/brightness pattern around azimuthal angle over time
+- [ ] Animate stars: slow drift/parallax using `frame_count` as time offset
+- [ ] Camera orbit: slowly rotate camera position around BH over time
 - [ ] Smooth 60fps confirmed
+- [ ] Full motion: stars drift, disk spins, camera orbits — looks like a movie
 
 ---
 
