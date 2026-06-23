@@ -10,7 +10,7 @@ const SCREEN_WIDTH:   usize = 800;
 const SCREEN_HEIGHT:  usize = 600;
 const M:              f32   = 1.0;
 const RS:             f32   = 2.0 * M;
-const CAM_DIST:       f32   = 40.0;
+const CAM_DIST:       f32   = 25.0;
 const DISK_INNER:     f32   = 3.0 * RS;
 const DISK_OUTER:     f32   = 15.0 * RS;   // wider → longer arms
 const T_MAX:          f32   = 1.0;
@@ -141,7 +141,7 @@ fn main() {
 
     let b_crit        = (3.0 * 3.0_f32.sqrt() / 2.0) * RS;
     let mut cam_dist  = CAM_DIST;
-    let mut cam_pitch = 0.17_f32;   // ~10° from disk plane — Gargantua viewing angle
+    let mut cam_pitch = 0.26_f32;   // ~15° from disk plane — shows shadow + lensed arc + disk arms
     let mut cam_yaw   = 0.0_f32;
 
     let build_cache = |cam_dist: f32, cam_pitch: f32, cam_yaw: f32| -> Vec<PixelCache> {
@@ -227,67 +227,83 @@ fn main() {
 
     let mut pixel_cache      = build_cache(cam_dist, cam_pitch, cam_yaw);
     let mut mouse_prev: Option<(f32, f32)> = None;
-    let mut is_dragging      = false;
     let mut target_cam_dist  = cam_dist;
-    let mut last_rebuild     = Instant::now();
+    let mut target_cam_pitch = cam_pitch;
+    let mut target_cam_yaw   = cam_yaw;
+    let mut cache_dirty      = false;
+    let mut last_input       = Instant::now() - Duration::from_secs(1);
     let start                = Instant::now();
 
     while window.is_open() && !window.is_key_pressed(Key::Escape, KeyRepeat::No) {
         let time = start.elapsed().as_secs_f32();
 
-        let mut dirty = false;
-
+        // Input: update targets only — lerp handles the actual movement each frame
         if window.is_key_pressed(Key::Equal, KeyRepeat::Yes) {
             target_cam_dist = (target_cam_dist - 1.5).max(RS * 3.0);
+            last_input = Instant::now(); cache_dirty = true;
         }
         if window.is_key_pressed(Key::Minus, KeyRepeat::Yes) {
             target_cam_dist = (target_cam_dist + 1.5).min(80.0);
+            last_input = Instant::now(); cache_dirty = true;
         }
         if window.is_key_pressed(Key::W, KeyRepeat::Yes) {
-            cam_pitch = (cam_pitch + 0.04).min(1.45); dirty = true;
+            target_cam_pitch = (target_cam_pitch + 0.04).min(1.45);
+            last_input = Instant::now(); cache_dirty = true;
         }
         if window.is_key_pressed(Key::S, KeyRepeat::Yes) {
-            cam_pitch = (cam_pitch - 0.04).max(0.02); dirty = true;
+            target_cam_pitch = (target_cam_pitch - 0.04).max(0.02);
+            last_input = Instant::now(); cache_dirty = true;
         }
         if window.is_key_pressed(Key::A, KeyRepeat::Yes) {
-            cam_yaw -= 0.04; dirty = true;
+            target_cam_yaw -= 0.04;
+            last_input = Instant::now(); cache_dirty = true;
         }
         if window.is_key_pressed(Key::D, KeyRepeat::Yes) {
-            cam_yaw += 0.04; dirty = true;
+            target_cam_yaw += 0.04;
+            last_input = Instant::now(); cache_dirty = true;
         }
 
-        let prev_dragging = is_dragging;
         if window.get_mouse_down(MouseButton::Left) {
-            is_dragging = true;
             if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Pass) {
                 if let Some((px, py)) = mouse_prev {
                     let dx = mx - px;
                     let dy = my - py;
-                    cam_yaw   += dx * 0.005;
-                    cam_pitch  = (cam_pitch - dy * 0.003).clamp(0.02, 1.45);
+                    if dx.abs() + dy.abs() > 0.1 {
+                        target_cam_yaw   += dx * 0.005;
+                        target_cam_pitch  = (target_cam_pitch - dy * 0.003).clamp(0.02, 1.45);
+                        last_input = Instant::now(); cache_dirty = true;
+                    }
                 }
                 mouse_prev = Some((mx, my));
             }
         } else {
-            is_dragging  = false;
-            mouse_prev   = None;
-            if prev_dragging { dirty = true; }
+            mouse_prev = None;
         }
 
         if let Some((_, sy)) = window.get_scroll_wheel() {
             if sy.abs() > 0.0 {
                 target_cam_dist = (target_cam_dist - sy * 2.5).clamp(RS * 3.0, 80.0);
+                last_input = Instant::now(); cache_dirty = true;
             }
         }
 
-        let prev_dist = cam_dist;
-        cam_dist += (target_cam_dist - cam_dist) * 0.15;
-        if (cam_dist - prev_dist).abs() > 0.02 { dirty = true; }
+        // Smooth lerp all camera params every frame — zero physics cost, buttery motion
+        cam_dist  += (target_cam_dist  - cam_dist)  * 0.18;
+        cam_pitch += (target_cam_pitch - cam_pitch) * 0.18;
+        cam_yaw   += (target_cam_yaw   - cam_yaw)   * 0.18;
 
-        let throttle = if prev_dragging { Duration::ZERO } else { Duration::from_millis(80) };
-        if dirty && last_rebuild.elapsed() >= throttle {
-            pixel_cache  = build_cache(cam_dist, cam_pitch, cam_yaw);
-            last_rebuild = Instant::now();
+        // Rebuild only once camera has settled (300ms after last input AND near targets)
+        let near_target =
+            (target_cam_dist  - cam_dist).abs()  < 0.15 &&
+            (target_cam_pitch - cam_pitch).abs() < 0.003 &&
+            (target_cam_yaw   - cam_yaw).abs()   < 0.003;
+
+        if cache_dirty && near_target && last_input.elapsed() >= Duration::from_millis(300) {
+            cam_dist  = target_cam_dist;
+            cam_pitch = target_cam_pitch;
+            cam_yaw   = target_cam_yaw;
+            pixel_cache = build_cache(cam_dist, cam_pitch, cam_yaw);
+            cache_dirty = false;
         }
 
         // --- Pass 1: fill HDR buffer ---
