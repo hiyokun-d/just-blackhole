@@ -29,11 +29,14 @@ Physics-accurate. Real formulas. No aesthetic shortcuts. Modular structure.
 ---
 
 ## Phase 4 — Null Geodesic Ray Marching (Core Physics)
-- [ ] Understand the geodesic ODE: `d²u/dφ² + u = (3/2) * rs * u²` where `u = 1/r`
-- [ ] Implement numerical integrator (RK4 recommended) for ray path
-- [ ] Compute impact parameter `b = r * sin(θ)` per ray
-- [ ] Check critical impact parameter `b_crit = (3√3/2) * rs` — captured rays → black
-- [ ] Trace each ray until: hits event horizon, hits disk plane, or escapes
+- [x] Understand the geodesic ODE: `d²u/dφ² + u = (3/2) * rs * u²` where `u = 1/r`
+- [x] Implement numerical integrator (RK4 recommended) for ray path — `deriv` + `geodesic_step` done
+- [x] Implement `trace_ray(u0, w0) -> Option<f32>` — march ray until captured or escaped
+- [x] Compute impact parameter `b = r * sin(θ)` per ray
+- [x] Check critical impact parameter `b_crit = (3√3/2) * rs` — captured rays → black
+- [x] Trace each ray until: hits event horizon or escapes
+- [x] Wire `trace_ray` into pixel loop — replaced `is_horizon` check
+- [x] Gravitational lensing — deflect star lookup using `phi - PI` rotation
 
 ---
 
@@ -107,3 +110,10 @@ Physics-accurate. Real formulas. No aesthetic shortcuts. Modular structure.
 - [ ] Secondary photon ring (light that orbited once before escaping)
 - [ ] Kerr metric — rotating blackhole (frame dragging, ergosphere)
 - [ ] Real-time parameter tuning via keyboard (mass, camera distance, disk tilt)
+
+## 3D Upgrade (after modularization)
+- [ ] Build `camera.rs` with full 3D ray generation (position, direction, FOV)
+- [ ] Rays become 3D vectors, disk becomes a real tilted plane in 3D space
+- [ ] BH is a sphere not a circle
+- [ ] Tilted camera view — see disk top directly, disk bottom lensed over BH (Interstellar look)
+- [ ] Star field in 3D — sample background sphere not flat plane

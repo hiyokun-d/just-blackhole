@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use rand::random_range;
 use rayon::prelude::*;
@@ -7,7 +9,17 @@ const SCREEN_HEIGHT: usize = 600;
 
 const M: f32 = 1.0; // mass in geometric units
 const RS: f32 = 2.0 * M; // Schwarzschild radius (G=c=1, so rs = 2M)
-const CAM_DIST: f32 = 10.0; // camera sits this far from BH (in units of M)
+const CAM_DIST: f32 = 15.0; // camera sits this far from BH (in units of M)
+
+const DISK_INNER: f32 = 3.0 * RS;
+const DISK_OUTER: f32 = 12.0 * RS;
+const T_MAX: f32 = 1.0;
+
+enum RayResult {
+    Captured,
+    Escaped(f32),
+    HitDisk(f32),
+}
 
 fn deriv(u: f32, w: f32) -> (f32, f32) {
     return (w, (3.0 / 2.0) * RS * u.powi(2) - u);
@@ -27,6 +39,41 @@ fn geodesic_step(u: f32, w: f32, dphi: f32) -> (f32, f32) {
     return (new_u, new_w);
 }
 
+fn trace_tray(mut u0: f32, mut w0: f32) -> RayResult {
+    let mut phi: f32 = 0.0;
+
+    for _ in 0..1000 {
+        (u0, w0) = geodesic_step(u0, w0, 0.01);
+        phi += 0.01;
+
+        let r = 1.0 / u0;
+
+        if u0 > 1.0 / RS {
+            return RayResult::Captured;
+        } else if u0 < 0.0001 {
+            return RayResult::Escaped(phi);
+        } //else if r >= DISK_INNER && r <= DISK_OUTER && w0 < 0.0 {
+          //     return RayResult::HitDisk(r);
+          // }
+    }
+
+    return RayResult::Escaped(phi);
+}
+
+// to manage the color of the disk
+fn disk_color(r: f32) -> u32 {
+    // calculate the tempreature color, so we can see how it should be
+    let t_compute =
+        T_MAX * (DISK_INNER / r).powf(0.75) * (1.0 - (DISK_INNER / r).sqrt()).powf(0.25);
+    let t = t_compute.clamp(0.0, T_MAX);
+
+    let r = (255.0) as u8;
+    let g = (100.0 + 155.0 * t) as u8;
+    let b = (20.0 + 235.0 * t) as u8;
+
+    return 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+}
+
 fn main() {
     let mut buffer: Vec<u32> = vec![0; SCREEN_WIDTH * SCREEN_HEIGHT];
 
@@ -41,13 +88,17 @@ fn main() {
 
     window.set_target_fps(60);
 
-    let stars: Vec<(f32, f32)> = (0..100)
+    // change this if the stars is not enough
+    let stars: Vec<(f32, f32)> = (0..200)
         .map(|_| {
             let u = random_range(-0.75_f32..0.75_f32);
             let v = random_range(-0.75_f32..0.75_f32);
             (u, v)
         })
         .collect();
+
+    // impact the critical ring
+    let b_crit = (3.0 * 3.0_f32.sqrt() / 2.0) * RS;
 
     while window.is_open() && !window.is_key_pressed(Key::Escape, KeyRepeat::No) {
         let rows_per_chunk = 10;
@@ -65,20 +116,33 @@ fn main() {
                     let u = (x - (SCREEN_WIDTH as f32) / 2.0) / SCREEN_HEIGHT as f32;
                     let v = (y - (SCREEN_HEIGHT as f32) / 2.0) / SCREEN_HEIGHT as f32;
 
-                    // rendering white dot in center of the screen
-                    let is_horizon = (u.powi(2) + v.powi(2)).sqrt() < RS / CAM_DIST;
+                    let u0 = 1.0 / CAM_DIST;
 
-                    let stars_in = stars.iter().any(|&(su, sv)| {
-                        // sqrt((u - su)² + (v - sv)²) < 0.003
-                        ((u - su).powi(2) + (v - sv).powi(2)).sqrt() < 0.003
-                    });
+                    let b = (u.powi(2) + v.powi(2)).sqrt() * CAM_DIST; // impact
+                    let w0 = 1.0 / b;
 
-                    *pixel = if is_horizon {
-                        0xFFFFFF
-                    } else if stars_in {
-                        0xFFFFFF
-                    } else {
-                        0x00000
+                    if b < b_crit {
+                        *pixel = 0xFF000000;
+                        continue;
+                    }
+
+                    *pixel = match trace_tray(u0, w0) {
+                        RayResult::Captured => 0xFF000000,
+                        RayResult::HitDisk(_r) => 0xFFFFFFFF,
+                        RayResult::Escaped(phi) => {
+                            let alpha = phi - PI;
+                            let u_bent = u * alpha.cos() - v * alpha.sin();
+                            let v_bent = u * alpha.sin() + v * alpha.cos();
+
+                            let hit = stars.iter().any(|&(sx, sy)| {
+                                ((u_bent - sx).powi(2) + (v_bent - sy).powi(2)).sqrt() < 0.003
+                            });
+                            if hit {
+                                0xFFFFFFFF
+                            } else {
+                                0xFF000000
+                            }
+                        }
                     }
                 }
             });
