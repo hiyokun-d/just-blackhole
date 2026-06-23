@@ -201,23 +201,24 @@ fn main() {
         .collect()
     };
 
-    let mut pixel_cache  = build_cache(cam_dist, cam_pitch, cam_yaw);
+    let mut pixel_cache      = build_cache(cam_dist, cam_pitch, cam_yaw);
     let mut mouse_prev: Option<(f32, f32)> = None;
-    let mut last_rebuild = Instant::now();
-    let rebuild_throttle = Duration::from_millis(120);
-    let start            = Instant::now();
+    let mut is_dragging      = false;
+    let mut target_cam_dist  = cam_dist;
+    let mut last_rebuild     = Instant::now();
+    let start                = Instant::now();
 
     while window.is_open() && !window.is_key_pressed(Key::Escape, KeyRepeat::No) {
         let time = start.elapsed().as_secs_f32();
 
         let mut dirty = false;
 
-        // Keyboard zoom / pitch / yaw
+        // Keyboard zoom / pitch / yaw — immediate rebuild
         if window.is_key_pressed(Key::Equal, KeyRepeat::Yes) {
-            cam_dist = (cam_dist - 1.0).max(RS * 3.0); dirty = true;
+            target_cam_dist = (target_cam_dist - 1.5).max(RS * 3.0);
         }
         if window.is_key_pressed(Key::Minus, KeyRepeat::Yes) {
-            cam_dist = (cam_dist + 1.0).min(80.0); dirty = true;
+            target_cam_dist = (target_cam_dist + 1.5).min(80.0);
         }
         if window.is_key_pressed(Key::W, KeyRepeat::Yes) {
             cam_pitch = (cam_pitch + 0.04).min(1.45); dirty = true;
@@ -232,32 +233,42 @@ fn main() {
             cam_yaw += 0.04; dirty = true;
         }
 
-        // Mouse drag — left button orbits yaw / pitch
+        // Mouse drag — update yaw/pitch each frame (stars move instantly via cam_angle),
+        // but don't rebuild cache mid-drag; do a single rebuild on release instead
+        let prev_dragging = is_dragging;
         if window.get_mouse_down(MouseButton::Left) {
+            is_dragging = true;
             if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Pass) {
                 if let Some((px, py)) = mouse_prev {
                     let dx = mx - px;
                     let dy = my - py;
                     cam_yaw   += dx * 0.005;
                     cam_pitch  = (cam_pitch - dy * 0.003).clamp(0.02, 1.45);
-                    if dx.abs() > 0.5 || dy.abs() > 0.5 { dirty = true; }
                 }
                 mouse_prev = Some((mx, my));
             }
         } else {
-            mouse_prev = None;
+            is_dragging  = false;
+            mouse_prev   = None;
+            // rebuild once when button is released so disk snaps to new orientation
+            if prev_dragging { dirty = true; }
         }
 
-        // Scroll wheel zoom
+        // Scroll wheel — update target, lerp cam_dist toward it each frame
         if let Some((_, sy)) = window.get_scroll_wheel() {
             if sy.abs() > 0.0 {
-                cam_dist = (cam_dist - sy * 2.0).clamp(RS * 3.0, 80.0);
-                dirty = true;
+                target_cam_dist = (target_cam_dist - sy * 2.5).clamp(RS * 3.0, 80.0);
             }
         }
 
-        // Throttled rebuild — max ~8 rebuilds/s during drag, instant on key tap
-        if dirty && last_rebuild.elapsed() >= rebuild_throttle {
+        // Smooth lerp cam_dist → target (easing factor 0.15 ≈ ~10 frames to settle)
+        let prev_dist = cam_dist;
+        cam_dist += (target_cam_dist - cam_dist) * 0.15;
+        if (cam_dist - prev_dist).abs() > 0.02 { dirty = true; }
+
+        // Rebuild at most every 80ms during continuous scroll/key, instantly on release
+        let throttle = if prev_dragging { Duration::ZERO } else { Duration::from_millis(80) };
+        if dirty && last_rebuild.elapsed() >= throttle {
             pixel_cache  = build_cache(cam_dist, cam_pitch, cam_yaw);
             last_rebuild = Instant::now();
         }
