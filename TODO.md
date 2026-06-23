@@ -82,21 +82,22 @@ Physics-accurate. Real formulas. No aesthetic shortcuts. Modular structure.
 - [x] Animate disk: rotate color/brightness pattern around azimuthal angle over time
 - [x] Pre-compute ray paths once at startup — render loop only does color math (smooth 60fps)
 - [x] Smooth 60fps confirmed
-- [ ] Animate stars: slow drift/parallax using time offset
-- [ ] Camera orbit: slowly rotate camera position around BH over time
+- [x] Animate stars: drift via cam_angle rotation on bent sky coords each frame
+- [x] Camera drift: star field rotates over time (cam_angle = time * 0.04)
 
 ---
 
 ## Phase 11 — Visual Polish (Interstellar look)
-- [ ] Bloom effect: bright pixels bleed into neighbors (box blur or gaussian — makes disk glow)
-- [ ] Tone mapping: HDR → displayable range (Reinhard: `c / (c + 1.0)`) — prevents blown-out whites
-- [ ] Warmer color palette: shift disk from orange→white to gold→white (Interstellar tone)
-- [ ] Disk texture: add fine noise/filament pattern using multi-octave sine — breaks up flat solid look
-- [ ] Disk thickness: soft vertical falloff based on ray angle — disk fades near edges not hard cutoff
-- [ ] Lensed back disk: rays from behind BH bent over shadow — the bright arc over the top of BH
-- [ ] Secondary photon ring: faint ring from light that orbited once (`orbits == 1`) — thinner than primary
-- [ ] Increase star count to 1000+ and vary brightness — some stars dimmer than others
-- [ ] Camera tilt ~15° like Interstellar — see disk from above at angle, back disk lensed over top
+- [x] Bloom effect: separable box blur bloom, radius 14, Reinhard tone map
+- [x] Tone mapping: HDR → displayable range (Reinhard: `c / (c + 1.0)`)
+- [x] Warmer color palette: gold-white Interstellar palette, disk HDR values 4× for bright bloom
+- [x] Disk texture: multi-octave sine (3 harmonics) for filament/turbulence look
+- [x] Lensed back disk: `orbits == 1` → `LensedDisk` cache variant → arc above shadow at 45% brightness
+- [x] Secondary image: rays that orbited once show dim disk color creating inner ring above shadow
+- [x] 1000 stars via texture, O(1) lookup, drift with cam_angle = time * 0.04
+- [x] Look-at camera centered on BH, elevation ~17°
+- [ ] Disk thickness: soft vertical falloff based on ray angle
+- [ ] Camera tilt ~15° like Interstellar
 
 ---
 
@@ -115,10 +116,12 @@ Physics-accurate. Real formulas. No aesthetic shortcuts. Modular structure.
 ---
 
 ## Camera Controls
-- [ ] WASD — move camera position around BH
-- [ ] Mouse drag — rotate camera orientation (yaw/pitch)
-- [ ] Scroll wheel — zoom in/out (change CAM_DIST)
-- [ ] Camera state: position + yaw + pitch as mutable vars, updated each frame
+- [x] WASD — orbit camera around BH (A/D = yaw, W/S = pitch)
+- [x] Mouse drag — left-click drag for yaw/pitch orbit (120ms throttled cache rebuild)
+- [x] Scroll wheel — zoom in/out (cam_dist clamped RS*3..80)
+- [x] Camera state: cam_dist + cam_pitch + cam_yaw as mutable vars
+- [x] Default view at cam_dist=40 — full Gargantua view (disk oval + shadow visible)
+- [x] Lensed arc b-limit — b < 1.8*b_crit prevents gold background at close distances
 
 ---
 
